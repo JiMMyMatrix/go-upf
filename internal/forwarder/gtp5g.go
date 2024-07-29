@@ -12,6 +12,7 @@ import (
 	"github.com/khirono/go-nl"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"github.com/wmnsk/go-pfcp/ie"
 
 	"github.com/free5gc/go-gtp5gnl"
@@ -39,6 +40,8 @@ type Gtp5g struct {
 	bsnl     *buffnetlink.Server
 	ps       *perio.Server
 	log      *logrus.Entry
+	inflink  *netlink.Link
+	vlink    *netlink.Link
 }
 
 func OpenGtp5g(wg *sync.WaitGroup, addr string, mtu uint32) (*Gtp5g, error) {
@@ -137,6 +140,16 @@ func (g *Gtp5g) Close() {
 	}
 	if g.ps != nil {
 		g.ps.Close()
+	}
+	if g.inflink != nil {
+		if err := netlink.LinkDel(*g.inflink); err != nil {
+			logger.MainLog.Infoln("Delete interface error")
+		}
+	}
+	if g.vlink != nil {
+		if err := netlink.LinkDel(*g.vlink); err != nil {
+			logger.MainLog.Infoln("Delete vrf error")
+		}
 	}
 }
 
@@ -563,6 +576,15 @@ func (g *Gtp5g) newForwardingParameter(ies []*ie.IE) (nl.AttrList, error) {
 	for _, x := range ies {
 		switch x.Type {
 		case ie.DestinationInterface:
+			v, err := x.DestinationInterface()
+			if err != nil {
+				break
+			}
+			attrs = append(attrs, nl.Attr{
+				Type:  gtp5gnl.FORWARDING_PARAMETER_DESTINATION_INTERFACE,
+				Value: nl.AttrU8(v),
+			})
+			// g.log.Infoln("Dst interafce: ", v)
 		case ie.NetworkInstance:
 		case ie.OuterHeaderCreation:
 			v, err := x.OuterHeaderCreation()
@@ -640,6 +662,7 @@ func (g *Gtp5g) CreateFAR(lSeid uint64, req *ie.IE) error {
 				return err
 			}
 			farid = uint64(v)
+			// g.log.Infoln("FAR ID insert in upf: ", v)
 		case ie.ApplyAction:
 			b, err := i.ApplyAction()
 			if err != nil {
@@ -701,6 +724,7 @@ func (g *Gtp5g) UpdateFAR(lSeid uint64, req *ie.IE) error {
 				return err
 			}
 			farid = uint64(v)
+			g.log.Infoln("FAR ID update: ", v)
 		case ie.ApplyAction:
 			b, err := i.ApplyAction()
 			if err != nil {

@@ -22,6 +22,7 @@ type UpfApp struct {
 	cfg        *factory.Config
 	driver     forwarder.Driver
 	pfcpServer *pfcp.PfcpServer
+	//intControler *forwarder.infControler
 }
 
 func NewApp(cfg *factory.Config) (*UpfApp, error) {
